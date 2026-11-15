@@ -160,7 +160,7 @@ struct ContentView: View {
                 }
                 Text("Giọng PC dùng cùng phiên bản mô hình và dữ liệu mẫu giọng của Windows 2.9.3, chạy trực tiếp trên iPhone. Mô hình native Q8 tối ưu dung lượng; kết quả có thể khác nhẹ giữa các lần tạo.").font(.caption).foregroundStyle(.secondary)
                 if store.project.voiceEngine == "desktop" {
-                    Button(desktopPreviewBusy ? "Đang tạo giọng mẫu…" : "Nghe thử giọng PC") { previewDesktopVoice() }.disabled(desktopPreviewBusy)
+                    Button(desktopPreviewBusy ? "Đang tạo giọng mẫu…" : "Nghe thử giọng PC") { previewDesktopVoice() }.disabled(desktopPreviewBusy || export.busy || scanner.busy)
                 }
                 if store.project.voiceEngine == "ios" {
                 Picker("Giọng tiếng Việt trên iPhone",selection: $store.project.voiceID) {
@@ -246,7 +246,7 @@ struct ContentView: View {
                 TextField("Lời kêu gọi cuối video",text: $store.project.outroText,axis: .vertical)
             }
             Section {
-                Button { export.start(store: store) } label: { Label("Tạo video MP4 trên iPhone",systemImage: "sparkles").frame(maxWidth: .infinity).padding(.vertical,8) }.buttonStyle(.borderedProminent).disabled(export.busy)
+                Button { desktopPreviewPlayer?.stop();voicePreview.stopSpeaking(at: .immediate);export.start(store: store) } label: { Label("Tạo video MP4 trên iPhone",systemImage: "sparkles").frame(maxWidth: .infinity).padding(.vertical,8) }.buttonStyle(.borderedProminent).disabled(export.busy || desktopPreviewBusy)
                 ProgressView(value: export.progress)
                 Text(export.status).font(.caption)
                 if export.busy { Button("Dừng",role: .destructive) { export.cancel() } }

@@ -33,6 +33,12 @@ cmake -S Native -B "Native/build/$sdk" -DCMAKE_BUILD_TYPE=Release \
   -DSEA_LIBRARY="$repo/Native/deps/sea/target/$rust_target/release/libsea_g2p_rs.a"
 cmake --build "Native/build/$sdk" --target studio_voice --parallel 3
 test -s "Native/build/$sdk/libStudioVoice.a"
+printf '%s\n' '#include "VoiceBridge.h"' 'int main(int n,char **v){char e[512];studio_voice_close(studio_voice_open(n>1?v[1]:"",e,sizeof e));return 0;}' > "Native/build/$sdk/link-smoke.cpp"
+target=arm64-apple-ios17.0
+if [ "$sdk" = iphonesimulator ]; then target=arm64-apple-ios17.0-simulator; fi
+xcrun --sdk "$sdk" clang++ -std=c++17 -target "$target" -isysroot "$(xcrun --sdk "$sdk" --show-sdk-path)" \
+  -I Native "Native/build/$sdk/link-smoke.cpp" "Native/build/$sdk/libStudioVoice.a" \
+  -framework Accelerate -framework Security -liconv -o "Native/build/$sdk/link-smoke"
 mkdir -p ThreadsStudio/Library/voice/licenses
 cp Native/deps/audio/LICENSE ThreadsStudio/Library/voice/licenses/audio-cpp.txt
 cp Native/deps/sea/LICENSE ThreadsStudio/Library/voice/licenses/sea-g2p.txt

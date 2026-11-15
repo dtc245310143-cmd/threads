@@ -24,5 +24,5 @@ target_link_libraries(studio_voice PRIVATE audiocpp_static "${SEA_LIBRARY}")
 add_custom_command(TARGET studio_voice POST_BUILD
     COMMAND /usr/bin/libtool -static -o "${CMAKE_BINARY_DIR}/libStudioVoice.a"
     "$<TARGET_FILE:studio_voice>" "$<TARGET_FILE:audiocpp_static>" "$<TARGET_FILE:engine_runtime>"
-    "$<TARGET_FILE:ggml>" "$<TARGET_FILE:ggml-base>" "$<TARGET_FILE:ggml-cpu>"
+    "$<TARGET_FILE:ggml>" "$<TARGET_FILE:ggml-base>" "$<TARGET_FILE:ggml-cpu>" "$<TARGET_FILE:ggml-blas>"
     "$<TARGET_FILE:sentencepiece>" "$<TARGET_FILE:cjson_vendor>" "$<TARGET_FILE:yaml_vendor>" "${SEA_LIBRARY}")
