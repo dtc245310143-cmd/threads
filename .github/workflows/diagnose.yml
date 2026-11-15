@@ -1,0 +1,49 @@
+name: Inspect iOS export crash
+on:
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/diagnose.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 43698700341
+          name: iOS-diagnostics
+          path: previous
+      - name: Decode failure
+        run: |
+          if [ -d /Applications/Xcode_16.4.app ]; then sudo xcode-select -s /Applications/Xcode_16.4.app; fi
+          xcrun xcresulttool get object --legacy --path previous/test-results.xcresult --format json > result.json
+          python3 - <<'PY'
+          import json
+          def walk(x):
+            if isinstance(x,dict):
+              if 'message' in x: print(json.dumps(x,ensure_ascii=False)[:12000])
+              for v in x.values(): walk(v)
+            elif isinstance(x,list):
+              for v in x: walk(v)
+          walk(json.load(open('result.json')))
+          PY
+          xcrun xcresulttool export diagnostics --path previous/test-results.xcresult --output-path exported
+          python3 - <<'PY'
+          from pathlib import Path
+          for p in Path('exported').rglob('*'):
+            if p.suffix in ('.crash','.ips') and 'ThreadsStudio' in p.name:
+              print(p)
+              print(p.read_text(errors='replace')[:40000])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: decoded-iOS-diagnostics
+          path: |
+            result.json
+            exported
+          retention-days: 7
