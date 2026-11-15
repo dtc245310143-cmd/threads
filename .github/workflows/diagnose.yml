@@ -1,0 +1,32 @@
+name: Inspect native voice timeout
+on:
+  push:
+    paths: ['.github/workflows/diagnose.yml']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 43706440237
+          name: iOS-diagnostics
+          path: previous
+      - name: Decode timeout
+        run: |
+          if [ -d /Applications/Xcode_16.4.app ]; then sudo xcode-select -s /Applications/Xcode_16.4.app; fi
+          xcrun xcresulttool get object --legacy --path previous/test-results.xcresult --format json > result.json
+          xcrun xcresulttool export diagnostics --path previous/test-results.xcresult --output-path exported
+          find exported -type f
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: decoded-iOS-diagnostics
+          path: |
+            result.json
+            exported
+          retention-days: 7
