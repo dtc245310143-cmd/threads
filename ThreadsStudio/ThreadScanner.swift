@@ -90,7 +90,13 @@ struct ScanResult: Codable { var root: ScanRecord;var comments: [ScanRecord] }
         guard result.root.text.count <= 16000 else { throw StudioError.message("Bài viết quá 16.000 ký tự.") }
         var updated = project
         updated.author = result.root.author;updated.text = result.root.text;updated.capturedText = result.root.text
-        updated.comments = result.comments.map(\.comment);updated.photos = [];updated.captures = []
+        let previous = project.comments.reduce(into: [String:ThreadComment]()) { $0[$1.id] = $1 }
+        updated.comments = result.comments.map { record in
+            var comment = record.comment
+            if let old = previous[comment.id] { comment.sounds = old.sounds;comment.effectOverride = old.effectOverride }
+            return comment
+        }
+        updated.photos = [];updated.captures = []
         if let url = webView.url { updated.sourceURL = url.absoluteString }
         for (index,source) in result.root.images.enumerated() {
             try Task.checkCancellation();status = "Đang lấy ảnh gốc \(index+1)/\(result.root.images.count)…"

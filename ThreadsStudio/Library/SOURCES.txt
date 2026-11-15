@@ -40,3 +40,10 @@ Danh sách từng tiếng: myinstants-sounds/manifest.json. Không phải chứn
 Myinstants: https://www.myinstants.com/en/index/vn/
 Snapshot metadata and sources: sounds/manifest.json
 Bundled media is unchanged from the Windows library; social-videos and personal uploads are excluded.
+
+
+Native desktop voice: VieNeu-TTS v3 Turbo (Pham Nguyen Ngoc Bao), https://huggingface.co/pnnbao-ump/VieNeu-TTS-v3-Turbo
+Native engine: https://github.com/0xShug0/audio.cpp
+Phonemizer: https://github.com/pnnbao97/sea-g2p
+Pinned revisions and model hashes: voice/model-manifest.json; dependency licenses: voice/licenses/
+Myinstants current desktop snapshot: sounds/manifest.json (19 selected sounds).

@@ -55,6 +55,8 @@ struct ContentView: View {
     @State private var importRole = ImportRole.photos
     @State private var commentSoundTarget: String?
     @State private var voicePreview = AVSpeechSynthesizer()
+    @State private var desktopPreviewBusy = false
+    @State private var desktopPreviewPlayer: AVAudioPlayer?
 
     var body: some View {
         TabView {
@@ -146,6 +148,9 @@ struct ContentView: View {
                     Text("Giọng iPhone dự phòng").tag("ios")
                 }
                 Text("Giọng PC dùng cùng phiên bản mô hình và dữ liệu mẫu giọng của Windows 2.9.3, chạy trực tiếp trên iPhone. Mô hình native Q8 tối ưu dung lượng; kết quả có thể khác nhẹ giữa các lần tạo.").font(.caption).foregroundStyle(.secondary)
+                if store.project.voiceEngine == "desktop" {
+                    Button(desktopPreviewBusy ? "Đang tạo giọng mẫu…" : "Nghe thử giọng PC") { previewDesktopVoice() }.disabled(desktopPreviewBusy)
+                }
                 if store.project.voiceEngine == "ios" {
                 Picker("Giọng tiếng Việt trên iPhone",selection: $store.project.voiceID) {
                     Text("Tự chọn giọng tốt nhất").tag("")
@@ -277,6 +282,23 @@ struct ContentView: View {
                     }
                 }
             } catch { store.message = error.localizedDescription }
+    }
+
+    private func previewDesktopVoice() {
+        guard !desktopPreviewBusy else { return }
+        desktopPreviewBusy = true;desktopPreviewPlayer?.stop();desktopPreviewPlayer = nil
+        voicePreview.stopSpeaking(at: .immediate)
+        Task {
+            defer { desktopPreviewBusy = false }
+            do {
+                let file = FileManager.default.temporaryDirectory.appendingPathComponent("desktop-voice-preview.wav")
+                try await DesktopVoice().write("Mình sẽ đọc chậm và rõ. Còn đây là câu tiếp theo.",destination: file)
+                try AVAudioSession.sharedInstance().setCategory(.playback,mode: .spokenAudio)
+                try AVAudioSession.sharedInstance().setActive(true)
+                let player = try AVAudioPlayer(contentsOf: file);player.enableRate = true;player.rate = Float(store.project.speed)
+                desktopPreviewPlayer = player;player.play()
+            } catch { store.message = error.localizedDescription }
+        }
     }
 
     private func pick(_ role: ImportRole) { commentSoundTarget = nil;importRole = role;importing = true }
