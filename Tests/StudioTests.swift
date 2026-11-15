@@ -31,6 +31,7 @@ import Vision
         var project = Project();project.text = "First sentence";project.author = "first"
         project.comments = [ThreadComment(id: "1",author: "second",text: "Second comment")]
         project.readAloud = false;project.backgroundEnabled = false;project.auxiliaryEnabled = false;project.musicEnabled = false
+        project.effectMode = "every"
         project.outroEnabled = true;project.channelName = "Channel";project.outroText = "Follow the channel"
         var wave = Data("RIFF".utf8)
         func u32(_ value: UInt32) -> Data { var number = value.littleEndian;return withUnsafeBytes(of: &number) { Data($0) } }
@@ -55,5 +56,38 @@ import Vision
             let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased()
             XCTAssertTrue(text.contains(expected),"Wrong/blank card at \(seconds): \(text)")
         }
+    }
+
+    func testEffectScheduleAllowsGapsConsecutiveAndPerCommentChoices() throws {
+        var project = Project();project.effectMode = "random";project.effectProbability = 0.35
+        var draws = [0.8,0.7,0.1,0.2]
+        XCTAssertEqual((0..<4).map { EffectSchedule.shouldPlay(project,index: $0,override: nil,draw: { draws.removeFirst() }) },[false,false,true,true])
+        project.effectMode = "fixed";project.effectEvery = 3
+        XCTAssertEqual((0..<6).map { EffectSchedule.shouldPlay(project,index: $0,override: nil) },[false,false,true,false,false,true])
+        XCTAssertTrue(EffectSchedule.shouldPlay(project,index: 0,override: true))
+        XCTAssertFalse(EffectSchedule.shouldPlay(project,index: 2,override: false))
+        project.soundsEnabled = false
+        XCTAssertFalse(EffectSchedule.shouldPlay(project,index: 0,override: true))
+    }
+
+    func testOldDraftKeepsValuesAndGetsNewVoiceAndEffectDefaults() throws {
+        var project = Project();project.channelName = "My old channel";project.speed = 0.8
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(project)) as! [String:Any]
+        for key in ["voiceEngine","effectMode","effectProbability","effectEvery","blurBackground"] { json.removeValue(forKey: key) }
+        let restored = try Project.decodeSaved(JSONSerialization.data(withJSONObject: json))
+        XCTAssertEqual(restored.channelName,"My old channel");XCTAssertEqual(restored.speed,0.8)
+        XCTAssertEqual(restored.voiceEngine,"desktop");XCTAssertEqual(restored.effectMode,"random")
+    }
+
+    func testDesktopVoiceActuallyGeneratesSpeech() async throws {
+        let destination = FileManager.default.urls(for: .documentDirectory,in: .userDomainMask)[0].appendingPathComponent("native-voice-test.wav")
+        try await DesktopVoice().write("Xin chào các bạn. Đây là giọng mẫu trên máy tính.",destination: destination)
+        let length = try await audioDuration(destination)
+        XCTAssertGreaterThan(length,1);XCTAssertLessThan(length,30)
+        let file = try AVAudioFile(forReading: destination)
+        let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat,frameCapacity: AVAudioFrameCount(file.length))!
+        try file.read(into: buffer)
+        let samples = UnsafeBufferPointer(start: buffer.floatChannelData![0],count: Int(buffer.frameLength))
+        XCTAssertGreaterThan(samples.map { abs($0) }.max() ?? 0,0.01)
     }
 }

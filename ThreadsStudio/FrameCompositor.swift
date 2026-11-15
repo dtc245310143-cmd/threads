@@ -19,9 +19,11 @@ final class FrameInstruction: NSObject,AVVideoCompositionInstructionProtocol {
     let auxiliary: CMPersistentTrackID?
     let backgroundTransform: CGAffineTransform
     let frames: [VisualFrame]
-    init(duration: CMTime,background: CMPersistentTrackID,auxiliary: CMPersistentTrackID?,backgroundTransform: CGAffineTransform,frames: [VisualFrame]) {
+    let blurBackground: Bool
+    init(duration: CMTime,background: CMPersistentTrackID,auxiliary: CMPersistentTrackID?,backgroundTransform: CGAffineTransform,frames: [VisualFrame],blurBackground: Bool) {
         timeRange = CMTimeRange(start: .zero,duration: duration)
         self.background = background;self.auxiliary = auxiliary;self.backgroundTransform = backgroundTransform;self.frames = frames
+        self.blurBackground = blurBackground
         requiredSourceTrackIDs = ([background]+(auxiliary.map { [$0] } ?? [])).map { NSNumber(value: $0) }
         super.init()
     }
@@ -60,6 +62,7 @@ final class FrameCompositor: NSObject,AVVideoCompositing {
         let size = request.renderContext.size,bounds = CGRect(origin: .zero,size: size)
         var image = source(background,transform: instruction.backgroundTransform,outputHeight: size.height)
             .composited(over: CIImage(color: CIColor(red: 0.06,green: 0.09,blue: 0.16)).cropped(to: bounds))
+        if instruction.blurBackground { image = image.clampedToExtent().applyingFilter("CIGaussianBlur",parameters: [kCIInputRadiusKey:18]).cropped(to: bounds) }
         let time = request.compositionTime.seconds
         if let frame = instruction.frames.first(where: { time >= $0.start-0.00001 && time < $0.end-0.00001 }) {
             if let id = instruction.auxiliary,let transform = frame.auxiliaryTransform,let sourcePixel = request.sourceFrame(byTrackID: id) {

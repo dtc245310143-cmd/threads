@@ -22,7 +22,7 @@ import UniformTypeIdentifiers
             catch { status = "Xuất thất bại";store.message = error.localizedDescription }
         }
     }
-    func cancel() { task?.cancel() }
+    func cancel() { status = "Đang dừng sau đoạn đang đọc…";task?.cancel() }
     func saveToPhotos(store: ProjectStore) {
         guard let output else { return }
         Task {
@@ -123,6 +123,9 @@ struct ContentView: View {
                         HStack { Text(comment.author).font(.subheadline.bold());Spacer();Text("♥ \(comment.likes) · ↩ \(comment.replies)").font(.caption).foregroundStyle(.secondary) }
                         TextField("Bình luận",text: $comment.text,axis: .vertical)
                         if comment.authorLiked || comment.authorReplied { Label("Có tương tác của tác giả",systemImage: "checkmark.seal.fill").font(.caption2).foregroundStyle(.green) }
+                        Picker("Hiệu ứng sau bình luận",selection: Binding(get: { comment.effectOverride.map { $0 ? "yes" : "no" } ?? "auto" },set: { comment.effectOverride = $0 == "auto" ? nil : $0 == "yes" })) {
+                            Text("Theo chế độ chung").tag("auto");Text("Có").tag("yes");Text("Không").tag("no")
+                        }.font(.caption)
                         HStack {
                             Button("Gán tiếng riêng (\(comment.sounds.count))") { commentSoundTarget = comment.id;importRole = .sounds;importing = true }.buttonStyle(.borderless)
                             if !comment.sounds.isEmpty { Button("Bỏ tiếng riêng",role: .destructive) { comment.sounds = [] }.buttonStyle(.borderless) }
@@ -138,20 +141,28 @@ struct ContentView: View {
         Form {
             Section {
                 Toggle("Đọc nội dung bằng giọng nói",isOn: $store.project.readAloud)
+                Picker("Bộ giọng",selection: $store.project.voiceEngine) {
+                    Text("Giọng PC · VieNeu + mẫu gốc").tag("desktop")
+                    Text("Giọng iPhone dự phòng").tag("ios")
+                }
+                Text("Giọng PC dùng cùng phiên bản mô hình và dữ liệu mẫu giọng của Windows 2.9.3, chạy trực tiếp trên iPhone. Mô hình native Q8 tối ưu dung lượng; kết quả có thể khác nhẹ giữa các lần tạo.").font(.caption).foregroundStyle(.secondary)
+                if store.project.voiceEngine == "ios" {
                 Picker("Giọng tiếng Việt trên iPhone",selection: $store.project.voiceID) {
                     Text("Tự chọn giọng tốt nhất").tag("")
                     ForEach(AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("vi") },id: \.identifier) { voice in Text(voice.name).tag(voice.identifier) }
                 }
-                Text("Dùng giọng iOS, không phải giọng VieNeu trong video mẫu Windows. Có thể tải thêm giọng tiếng Việt trong Cài đặt > Trợ năng > Nội dung được đọc.").font(.caption).foregroundStyle(.secondary)
+                Text("Giọng iPhone là lựa chọn dự phòng; cần tải giọng tiếng Việt nếu chưa có.").font(.caption).foregroundStyle(.secondary)
+                }
                 valueSlider("Tốc độ",value: $store.project.speed,range: 0.5...2,step: 0.05,suffix: "×")
                 valueSlider("Nghỉ giữa câu",value: $store.project.sentencePause,range: 0...2,step: 0.05,suffix: "giây")
                 valueSlider("Nghỉ xuống dòng",value: $store.project.paragraphPause,range: 0...3,step: 0.05,suffix: "giây")
                 Text("Khoảng nghỉ được ghép vào video, giữ nguyên khi đổi tốc độ. Đặt dấu câu hoặc xuống dòng để ngắt đúng ý.").font(.caption).foregroundStyle(.secondary)
-                Button("Nghe giọng iPhone") {
+                if store.project.voiceEngine == "ios" { Button("Nghe giọng iPhone") {
                     voicePreview.stopSpeaking(at: .immediate)
                     let utterance = AVSpeechUtterance(string: "Mình sẽ đọc chậm và rõ. Còn đây là câu tiếp theo.")
                     utterance.voice = AVSpeechSynthesisVoice(identifier: store.project.voiceID) ?? AVSpeechSynthesisVoice(language: "vi-VN")
                     utterance.rate = AVSpeechUtteranceDefaultSpeechRate*Float(store.project.speed);voicePreview.speak(utterance)
+                }
                 }
             } header: { Text("02 · Giọng đọc độc lập trên iPhone") }
             Section("Cách đọc") {
@@ -166,6 +177,15 @@ struct ContentView: View {
         Form {
             Section {
                 Toggle("Sound effect sau bình luận",isOn: $store.project.soundsEnabled)
+                Picker("Tần suất xuất hiện",selection: $store.project.effectMode) {
+                    Text("Ngẫu nhiên linh hoạt").tag("random");Text("Mỗi N bình luận").tag("fixed");Text("Mọi bình luận").tag("every")
+                }
+                if store.project.effectMode == "random" {
+                    HStack { Text("Xác suất mỗi bình luận");Spacer();Text("\(Int(store.project.effectProbability*100))%").foregroundStyle(.secondary) }
+                    Slider(value: $store.project.effectProbability,in: 0...1,step: 0.05)
+                    Text("Mỗi bình luận được chọn độc lập: có thể bỏ qua hai bình luận rồi phát, hoặc phát liên tiếp. Chọn Có/Không riêng trong mục Bình luận để chủ động sắp xếp.").font(.caption).foregroundStyle(.secondary)
+                }
+                if store.project.effectMode == "fixed" { Stepper("Mỗi \(store.project.effectEvery) bình luận phát một lần",value: $store.project.effectEvery,in: 1...20) }
                 Stepper("\(store.project.soundCount) sound effect / bình luận",value: $store.project.soundCount,in: 0...5)
                 valueSlider("Âm lượng hiệu ứng",value: $store.project.soundVolume,range: 0...1,step: 0.05,suffix: "")
                 Button("Thêm MP3 hoặc video để lấy tiếng") { pick(.sounds) }
@@ -174,6 +194,7 @@ struct ContentView: View {
             } header: { Text("03 · Hiệu ứng") }
             Section {
                 Toggle("Video nền",isOn: $store.project.backgroundEnabled)
+                Toggle("Làm mờ video nền",isOn: $store.project.blurBackground)
                 Button("Thêm nhiều video nền") { pick(.backgrounds) };mediaList($store.project.backgrounds)
                 Toggle("Video thu hút bên dưới thẻ",isOn: $store.project.auxiliaryEnabled)
                 Button("Thêm nhiều video phụ") { pick(.auxiliaryVideos) };mediaList($store.project.auxiliaryVideos)

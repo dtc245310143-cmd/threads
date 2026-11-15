@@ -2,6 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 python3 scripts/generate_project.py
+python3 scripts/prepare_voice_assets.py
+if [ ! -s Native/build/iphoneos/libStudioVoice.a ]; then bash scripts/build_voice.sh iphoneos; fi
 xcodebuild -project ThreadsStudio.xcodeproj -scheme ThreadsStudio -configuration Release \
   -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build-device \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY= build

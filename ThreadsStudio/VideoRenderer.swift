@@ -14,7 +14,7 @@ struct VideoScene {
     var start = 0.0
     var duration = 0.0
 }
-private struct AudioClip { var url: URL;var start: Double;var duration: Double;var effect: Bool }
+private struct AudioClip { var url: URL;var start: Double;var duration: Double;var effect: Bool;var rate = 1.0 }
 
 @MainActor enum CardDrawing {
     static let canvas = CGSize(width: 1080,height: 1920)
@@ -67,6 +67,7 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
 
 @MainActor final class VideoRenderer {
     private let speech = NativeSpeech()
+    private let desktopVoice = DesktopVoice()
     private var lastSound = ""
     private func ct(_ seconds: Double) -> CMTime { CMTime(seconds: seconds,preferredTimescale: 48000) }
 
@@ -97,9 +98,9 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
                 items.append(VideoScene(author: p.author,text: text,asset: photo.asset,photo: true,minimum: photo.seconds))
             }
         }
-        for comment in p.selectedComments() {
+        for (commentIndex,comment) in p.selectedComments().enumerated() {
             add(author: comment.author,text: comment.text,captures: comment.captures)
-            if p.soundsEnabled && p.soundCount > 0 {
+            if EffectSchedule.shouldPlay(p,index: commentIndex,override: comment.effectOverride) {
                 var pool = !comment.sounds.isEmpty ? comment.sounds : !p.sounds.isEmpty ? p.sounds : ProjectStore.library("sounds",extensions: ["mp3","wav","m4a"])
                 if comment.sounds.isEmpty && p.sounds.isEmpty {
                     let lower = comment.text.lowercased()
@@ -131,10 +132,13 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
             if p.readAloud {
                 let text = try SpeechText.spoken(items[index].text,project: p)
                 for (sentence,pause) in SpeechText.sentences(text,project: p) {
-                    let file = temp.appendingPathComponent("speech-\(number).caf");number += 1
-                    try await speech.write(sentence,project: p,destination: file)
-                    let length = try await mediaDuration(file)
-                    clips.append(AudioClip(url: file,start: cursor,duration: length,effect: false));cursor += length+pause
+                    let desktop = p.voiceEngine == "desktop"
+                    let file = temp.appendingPathComponent("speech-\(number).\(desktop ? "wav" : "caf")");number += 1
+                    if desktop { try await desktopVoice.write(sentence,destination: file) }
+                    else { try await speech.write(sentence,project: p,destination: file) }
+                    let rate = desktop ? p.speed : 1.0
+                    let length = try await mediaDuration(file)/rate
+                    clips.append(AudioClip(url: file,start: cursor,duration: length,effect: false,rate: rate));cursor += length+pause
                 }
             }
             cursor = max(cursor+0.25,start+items[index].minimum)
@@ -148,7 +152,8 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
         progress(0.62,"Đang ghép video, giọng đọc và nhạc…")
         let composition = AVMutableComposition()
         guard let background = composition.addMutableTrack(withMediaType: .video,preferredTrackID: kCMPersistentTrackID_Invalid) else { throw StudioError.message("Không tạo được lớp video.") }
-        let videos = ProjectStore.library("videos",extensions: ["mp4","mov","m4v"])
+        let social = ProjectStore.library("social-videos",extensions: ["mp4","mov","m4v"])
+        let videos = social.isEmpty ? ProjectStore.library("videos",extensions: ["mp4","mov","m4v"]) : social
         let backgroundChoice = p.backgroundEnabled ? (p.backgrounds.isEmpty ? videos : p.backgrounds).randomElement() : nil
         let base: URL
         if let backgroundChoice { base = try ProjectStore.url(backgroundChoice) }
@@ -191,9 +196,12 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
                 let asset = AVURLAsset(url: clip.url)
                 guard let source = try await asset.loadTracks(withMediaType: .audio).first else { throw StudioError.message("Tệp không có tiếng: \(clip.url.lastPathComponent)") }
                 let sourceRange = try await source.load(.timeRange)
-                try track.insertTimeRange(CMTimeRange(start: sourceRange.start,duration: ct(clip.duration)),of: source,at: ct(clip.start))
+                let sourceDuration = ct(clip.duration*clip.rate)
+                try track.insertTimeRange(CMTimeRange(start: sourceRange.start,duration: sourceDuration),of: source,at: ct(clip.start))
+                if clip.rate != 1 { track.scaleTimeRange(CMTimeRange(start: ct(clip.start),duration: sourceDuration),toDuration: ct(clip.duration)) }
             }
-            let input = AVMutableAudioMixInputParameters(track: track);input.setVolume(Float(effect ? p.soundVolume : 1),at: .zero);mixInputs.append(input)
+            let input = AVMutableAudioMixInputParameters(track: track);input.audioTimePitchAlgorithm = .spectral
+            input.setVolume(Float(effect ? p.soundVolume : 1),at: .zero);mixInputs.append(input)
         }
         if p.musicEnabled,let choice = (p.music.isEmpty ? ProjectStore.library("music",extensions: ["mp3","m4a","wav"]) : p.music).randomElement(),let track = composition.addMutableTrack(withMediaType: .audio,preferredTrackID: kCMPersistentTrackID_Invalid) {
             _ = try await loop(ProjectStore.url(choice),into: track,duration: cursor,type: .audio)
@@ -202,7 +210,7 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
             mixInputs.append(input)
         }
         let mix = AVMutableAudioMix();mix.inputParameters = mixInputs
-        let instruction = FrameInstruction(duration: ct(cursor),background: background.trackID,auxiliary: auxID,backgroundTransform: backgroundTransform,frames: frames)
+        let instruction = FrameInstruction(duration: ct(cursor),background: background.trackID,auxiliary: auxID,backgroundTransform: backgroundTransform,frames: frames,blurBackground: p.blurBackground)
         let videoComposition = AVMutableVideoComposition();videoComposition.renderSize = CardDrawing.canvas;videoComposition.frameDuration = CMTime(value: 1,timescale: 24)
         videoComposition.instructions = [instruction];videoComposition.customVideoCompositorClass = FrameCompositor.self
         guard let exporter = AVAssetExportSession(asset: composition,presetName: AVAssetExportPreset1920x1080) else { throw StudioError.message("iPhone không hỗ trợ xuất video này.") }

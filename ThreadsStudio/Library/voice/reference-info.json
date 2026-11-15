@@ -1,0 +1,9 @@
+{
+  "source": "Threads Studio Windows 2.9.3 built-in IMG_8430 voice",
+  "reference_sha256": "f34b34e73338c144f692d091f66a71afbab8d90823b6a38c8275c80e342b6437",
+  "reference_seconds": 6,
+  "model_revision": "61b85e3d937fbbacb387714180e8182823512523",
+  "speaker_dimensions": 192,
+  "code_frames": 75,
+  "code_groups": 16
+}

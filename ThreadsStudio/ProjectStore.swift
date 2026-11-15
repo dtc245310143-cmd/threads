@@ -18,12 +18,11 @@ import UniformTypeIdentifiers
     private var backup: URL { Self.root.appendingPathComponent("project.backup.json") }
 
     init() {
-        let decoder = JSONDecoder()
         for path in [session,backup] where FileManager.default.fileExists(atPath: path.path) {
             do {
                 let data = try Data(contentsOf: path)
                 guard data.count <= 8_000_000 else { throw StudioError.message("Bản nháp quá lớn.") }
-                project = try decoder.decode(Project.self,from: data)
+                project = try Project.decodeSaved(data)
                 saveStatus = path == session ? "Đã khôi phục" : "Khôi phục dự phòng"
                 break
             } catch { message = "Không đọc được \(path.lastPathComponent): \(error.localizedDescription)" }
@@ -43,7 +42,7 @@ import UniformTypeIdentifiers
         do {
             let data = try JSONEncoder().encode(project)
             guard data.count <= 8_000_000 else { throw StudioError.message("Bản nháp quá 8 MB.") }
-            if let old = try? Data(contentsOf: session), (try? JSONDecoder().decode(Project.self,from: old)) != nil {
+            if let old = try? Data(contentsOf: session), (try? Project.decodeSaved(old)) != nil {
                 try old.write(to: backup,options: .atomic)
             }
             try data.write(to: session,options: .atomic)

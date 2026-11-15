@@ -6,3 +6,8 @@ dist/
 **/xcuserdata/
 **/__pycache__/
 .DS_Store
+Native/build/
+Native/deps/
+ThreadsStudio/Library/voice/*.gguf
+ThreadsStudio/Library/voice/*.bin
+ThreadsStudio/Library/voice/*.download

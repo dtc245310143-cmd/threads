@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['ThreadsStudio/**', 'Tests/**', 'scripts/**', '.github/workflows/ios.yml']
+    paths: ['ThreadsStudio/**', 'Native/**', 'Tests/**', 'scripts/**', '.github/workflows/ios.yml']
 permissions:
   contents: read
 concurrency:
@@ -12,7 +12,7 @@ concurrency:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Select available Xcode
@@ -21,6 +21,18 @@ jobs:
           xcodebuild -version
       - name: Test Threads parser
         run: node Tests/scan.test.cjs
+      - name: Fetch verified voice model and reference
+        run: python3 scripts/prepare_voice_assets.py
+      - name: Build native VieNeu for Simulator
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          bash scripts/build_voice.sh iphonesimulator 2>&1 | tee native.log
+      - name: Build native VieNeu for iPhone
+        timeout-minutes: 20
+        run: |
+          set -o pipefail
+          bash scripts/build_voice.sh iphoneos 2>&1 | tee native-device.log
       - name: Generate project
         run: python3 scripts/generate_project.py
       - name: Pick iPhone simulator
@@ -46,13 +58,13 @@ jobs:
             -destination "platform=iOS Simulator,id=$STUDIO_SIMULATOR" -derivedDataPath build-simulator \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO ONLY_ACTIVE_ARCH=YES | tee compile.log
       - name: Native tests and actual MP4 export
-        timeout-minutes: 6
+        timeout-minutes: 10
         run: |
           set -o pipefail
           xcodebuild test-without-building -project ThreadsStudio.xcodeproj -scheme ThreadsStudio \
             -destination "platform=iOS Simulator,id=$STUDIO_SIMULATOR" -derivedDataPath build-simulator \
             -parallel-testing-enabled NO -resultBundlePath test-results.xcresult \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 90 -maximum-test-execution-time-allowance 120 \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 180 -maximum-test-execution-time-allowance 240 \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO | tee test.log
       - name: Build unsigned arm64 IPA
         run: bash scripts/build_ipa.sh | tee build.log
@@ -62,6 +74,8 @@ jobs:
           xcrun simctl launch "$STUDIO_SIMULATOR" com.threads.studio.local
           sleep 3
           xcrun simctl io "$STUDIO_SIMULATOR" screenshot dist/iPhone-preview.png
+          container=$(xcrun simctl get_app_container "$STUDIO_SIMULATOR" com.threads.studio.local data)
+          if [ -f "$container/Documents/native-voice-test.wav" ]; then cp "$container/Documents/native-voice-test.wav" dist/native-voice-test.wav; fi
       - name: Download IPA here
         uses: actions/upload-artifact@v4
         with:
@@ -70,6 +84,7 @@ jobs:
             dist/ThreadsStudio.ipa
             dist/ThreadsStudio.ipa.sha256
             dist/iPhone-preview.png
+            dist/native-voice-test.wav
           if-no-files-found: error
           retention-days: 14
       - name: Preserve diagnostics
@@ -80,6 +95,8 @@ jobs:
           path: |
             test.log
             compile.log
+            native.log
+            native-device.log
             build.log
             test-results.xcresult
           if-no-files-found: ignore

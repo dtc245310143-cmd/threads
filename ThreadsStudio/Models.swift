@@ -23,6 +23,7 @@ struct ThreadComment: Codable, Identifiable {
     var authorReplied: Bool = false
     var captures: [Capture] = []
     var sounds: [String] = []
+    var effectOverride: Bool? = nil
 }
 
 struct PostPhoto: Codable, Identifiable {
@@ -50,16 +51,21 @@ struct Project: Codable {
     var readPhotos = true
     var readAloud = true
     var voiceID = ""
+    var voiceEngine = "desktop"
     var speed = 0.95
     var sentencePause = 0.45
     var paragraphPause = 0.7
     var normalizeWords = true
     var speechRules = "kh=không\nko=không\nk=không\nđc=được\ndc=được\nvs=với\nmn=mọi người\nny=người yêu\nnyc=người yêu cũ\nib=nhắn tin\nrep=trả lời\nbth=bình thường\nj=gì\nz=vậy"
     var soundsEnabled = true
+    var effectMode = "random"
+    var effectEvery = 3
+    var effectProbability = 0.35
     var soundCount = 1
     var soundVolume = 0.65
     var sounds: [String] = []
     var backgroundEnabled = true
+    var blurBackground = true
     var auxiliaryEnabled = true
     var musicEnabled = true
     var backgrounds: [String] = []
@@ -100,12 +106,36 @@ struct Project: Codable {
               (0...100).contains(commentCount), (0.5...2).contains(speed),
               (0...5).contains(soundCount), (0...1).contains(soundVolume), (0...1).contains(musicVolume),
               (0...2).contains(sentencePause), (0...3).contains(paragraphPause),
+              ["desktop","ios"].contains(voiceEngine), ["every","fixed","random"].contains(effectMode),
+              (1...20).contains(effectEvery), (0...1).contains(effectProbability),
               photos.allSatisfy({ (2...120).contains($0.seconds) }),
               [cardX,cardY,auxiliaryX,auxiliaryY].allSatisfy({ $0.isFinite && (0...1).contains($0) }),
               [cardScale,auxiliaryScale].allSatisfy({ $0.isFinite && (0.3...1).contains($0) }) else {
             throw StudioError.message("Có tùy chỉnh vượt giới hạn. Kiểm tra tốc độ, âm lượng, số lượng và thời gian ảnh.")
         }
         _ = try SpeechText.rules(speechRules)
+    }
+
+    static func decodeSaved(_ data: Data) throws -> Project {
+        guard data.count <= 8_000_000,
+              let saved = try JSONSerialization.jsonObject(with: data) as? [String:Any],
+              var merged = try JSONSerialization.jsonObject(with: JSONEncoder().encode(Project())) as? [String:Any] else {
+            throw StudioError.message("Bản nháp không hợp lệ.")
+        }
+        merged.merge(saved) { _,old in old }
+        return try JSONDecoder().decode(Project.self,from: JSONSerialization.data(withJSONObject: merged))
+    }
+}
+
+enum EffectSchedule {
+    static func shouldPlay(_ project: Project,index: Int,override: Bool?,draw: () -> Double = { Double.random(in: 0..<1) }) -> Bool {
+        guard project.soundsEnabled,project.soundCount > 0 else { return false }
+        if let override { return override }
+        switch project.effectMode {
+        case "every":return true
+        case "fixed":return (index+1)%max(1,project.effectEvery) == 0
+        default:return draw() < project.effectProbability
+        }
     }
 }
 
