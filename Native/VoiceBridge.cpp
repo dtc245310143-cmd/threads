@@ -3,12 +3,14 @@
 #include "sea_g2p.h"
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 namespace {
 struct Voice {
@@ -35,12 +37,16 @@ void *studio_voice_open(const char *directory,char *error,size_t capacity) {
         check(audiocpp_registry_create(nullptr,&voice->registry));
         audiocpp_model_config config{};config.family_hint="vieneu_v3_turbo";
         check(audiocpp_model_load(voice->registry,(voice->directory+"/vieneu.gguf").c_str(),&config,nullptr,&voice->model));
-        audiocpp_backend_config backend{"cpu",0,4};
+        // ggml uses spinning barriers; oversubscribing a small CPU can stall inference.
+        const unsigned cores=std::thread::hardware_concurrency();
+        const int threads=static_cast<int>(std::max(1u,std::min(4u,cores>1?cores-1:1u)));
+        audiocpp_backend_config backend{"cpu",0,threads};
         std::unique_ptr<audiocpp_options,decltype(&audiocpp_options_free)> options(audiocpp_options_create(),audiocpp_options_free);
         if(!options) throw std::runtime_error("Cannot allocate voice options");
         // These are descriptor-only arenas; upstream's 64 MiB floor avoids multi-GB mobile reservations.
         for(const char *key:{"vieneu_v3_turbo.talker_constant_context_mb","vieneu_v3_turbo.code_predictor_constant_context_mb","vieneu_v3_turbo.speech_decoder_constant_context_mb","vieneu_v3_turbo.talker_graph_arena_mb"}) check(audiocpp_options_set(options.get(),key,"64"));
         check(audiocpp_session_create(voice->model,"tts","offline",&backend,options.get(),&voice->session));
+        std::fprintf(stderr,"VieNeu ready: %d CPU threads\n",threads);
         return voice.release();
     } catch(const std::exception &e) { fail(error,capacity,e.what());return nullptr; }
 }
@@ -58,7 +64,10 @@ int studio_voice_write(void *handle,const char *text,const char *destination,cha
         option("speaker_embedding_file",voice->directory+"/speaker.emb.txt");
         option("max_tokens","900");
         option("temperature","0.8");option("top_k","25");option("top_p","0.95");option("repetition_penalty","1.2");
+        const auto began=std::chrono::steady_clock::now();
+        std::fprintf(stderr,"VieNeu: generating speech\n");
         audiocpp_result *raw=nullptr;check(audiocpp_session_run(voice->session,request.get(),&raw));
+        std::fprintf(stderr,"VieNeu: generated in %.2f s\n",std::chrono::duration<double>(std::chrono::steady_clock::now()-began).count());
         std::unique_ptr<audiocpp_result,decltype(&audiocpp_result_free)> result(raw,audiocpp_result_free);
         const float *samples=nullptr;size_t frames=0;int rate=0,channels=0;
         check(audiocpp_result_audio(result.get(),&samples,&frames,&rate,&channels));
