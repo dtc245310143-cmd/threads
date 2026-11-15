@@ -2,6 +2,8 @@
 { archiveVersion = 1; classes = {}; objectVersion = 56; objects = {
 709163852BCDD888C6716E1C = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView.swift"; sourceTree = "<group>"; };
 879FDE897C285471E1175FC8 = { isa = PBXBuildFile; fileRef = 709163852BCDD888C6716E1C; };
+FA470310B8D4C5E4DE546479 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "FrameCompositor.swift"; sourceTree = "<group>"; };
+DE1A832CF53FC47B8125CBB6 = { isa = PBXBuildFile; fileRef = FA470310B8D4C5E4DE546479; };
 CA07003DC14BE99C0B694A58 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models.swift"; sourceTree = "<group>"; };
 5438F6952B2A53255241A6E8 = { isa = PBXBuildFile; fileRef = CA07003DC14BE99C0B694A58; };
 EEF3E3532C2ED763E8DBF446 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "NativeSpeech.swift"; sourceTree = "<group>"; };
@@ -21,7 +23,7 @@ F74471BC801E3AE9D1DE8CCF = { isa = PBXBuildFile; fileRef = 11EB33ECB30571E7D985C
 C7B0C46A1C4CFB9719FB7075 = { isa = PBXFileReference; lastKnownFileType = folder; path = "Library"; sourceTree = "<group>"; };
 B4653A8262015896B61EBEB2 = { isa = PBXBuildFile; fileRef = C7B0C46A1C4CFB9719FB7075; };
 CEB4C0D50A9C80C9E9BD66EB = { isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info.plist"; sourceTree = "<group>"; };
-FC233BDA2344D97687F5A251 = { isa = PBXGroup; children = (709163852BCDD888C6716E1C,CA07003DC14BE99C0B694A58,EEF3E3532C2ED763E8DBF446,A2252E815A4EE64F2A331E98,3E424EA996AAD31D62A148BC,A86CF4486874E0A10FEF3676,11EB33ECB30571E7D985C2F1,978312C5857E3AE7FB860FFF,890BFCC9289800420509A58A,C7B0C46A1C4CFB9719FB7075,CEB4C0D50A9C80C9E9BD66EB,); path = ThreadsStudio; sourceTree = "<group>"; };
+FC233BDA2344D97687F5A251 = { isa = PBXGroup; children = (709163852BCDD888C6716E1C,FA470310B8D4C5E4DE546479,CA07003DC14BE99C0B694A58,EEF3E3532C2ED763E8DBF446,A2252E815A4EE64F2A331E98,3E424EA996AAD31D62A148BC,A86CF4486874E0A10FEF3676,11EB33ECB30571E7D985C2F1,978312C5857E3AE7FB860FFF,890BFCC9289800420509A58A,C7B0C46A1C4CFB9719FB7075,CEB4C0D50A9C80C9E9BD66EB,); path = ThreadsStudio; sourceTree = "<group>"; };
 142640E93E1AD72575518F9B = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StudioTests.swift"; sourceTree = "<group>"; };
 C4E2E7F217DE3642E7714F4E = { isa = PBXGroup; children = (142640E93E1AD72575518F9B,); path = Tests; sourceTree = "<group>"; };
 681C948D238C526E9E3424E0 = { isa = PBXFileReference; explicitFileType = wrapper.application; path = ThreadsStudio.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -37,7 +39,7 @@ E28089EB494F94D6F9770EC2 = { isa = XCBuildConfiguration; buildSettings = {PRODUC
 20548860EEA3E0E8DE95BCA4 = { isa = XCConfigurationList; buildConfigurations = (2A04C20BF6D5C20A63A1D4CC,E28089EB494F94D6F9770EC2,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 BA7797CF42134E97AFE6577E = { isa = XCConfigurationList; buildConfigurations = (12946E3301F628EAC49744B8,42EE86C84AAD61C6F57FBD29,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 CD7C985718C27B30B80E0BF9 = { isa = XCConfigurationList; buildConfigurations = (488864B3D19480A82F7F1786,35B1014F135DE9B45529B733,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-AFF87A50730392B6633ACECE = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (879FDE897C285471E1175FC8,5438F6952B2A53255241A6E8,C68FF430E8A23CF7EDF01BBF,5A23F73B208659A3915D96A9,420F3333187DD80009A47705,A785DB4779D1B1F9FF0F8F2A,F74471BC801E3AE9D1DE8CCF,); runOnlyForDeploymentPostprocessing = 0; };
+AFF87A50730392B6633ACECE = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (879FDE897C285471E1175FC8,DE1A832CF53FC47B8125CBB6,5438F6952B2A53255241A6E8,C68FF430E8A23CF7EDF01BBF,5A23F73B208659A3915D96A9,420F3333187DD80009A47705,A785DB4779D1B1F9FF0F8F2A,F74471BC801E3AE9D1DE8CCF,); runOnlyForDeploymentPostprocessing = 0; };
 7A4C2DC8FCA657188648E999 = { isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 F9187E824FE171A6F0EFAE28 = { isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (6F73D0E7CAA44713FBB10684,070048F437A415A8B24F192B,B4653A8262015896B61EBEB2,); runOnlyForDeploymentPostprocessing = 0; };
 C1E9827DB735CA9BAA54A540 = { isa = PBXNativeTarget; buildConfigurationList = 20548860EEA3E0E8DE95BCA4; buildPhases = (AFF87A50730392B6633ACECE,7A4C2DC8FCA657188648E999,F9187E824FE171A6F0EFAE28,); buildRules = (); dependencies = (); name = ThreadsStudio; productName = ThreadsStudio; productReference = 681C948D238C526E9E3424E0; productType = "com.apple.product-type.application"; };

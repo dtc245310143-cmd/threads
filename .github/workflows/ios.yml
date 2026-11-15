@@ -33,13 +33,18 @@ jobs:
           if not iphones: raise SystemExit('No iPhone simulator installed')
           with open(os.environ['GITHUB_ENV'],'a') as f: f.write('STUDIO_SIMULATOR='+iphones[0]['udid']+'\n')
           PY
+      - name: Boot iPhone simulator
+        timeout-minutes: 12
+        run: |
+          xcrun simctl boot "$STUDIO_SIMULATOR" || true
+          xcrun simctl bootstatus "$STUDIO_SIMULATOR" -b
       - name: Compile native app and tests
         timeout-minutes: 8
         run: |
           set -o pipefail
           xcodebuild build-for-testing -project ThreadsStudio.xcodeproj -scheme ThreadsStudio \
             -destination "platform=iOS Simulator,id=$STUDIO_SIMULATOR" -derivedDataPath build-simulator \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO | tee compile.log
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO ONLY_ACTIVE_ARCH=YES | tee compile.log
       - name: Native tests and actual MP4 export
         timeout-minutes: 6
         run: |
@@ -51,6 +56,12 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO | tee test.log
       - name: Build unsigned arm64 IPA
         run: bash scripts/build_ipa.sh | tee build.log
+      - name: Preview native app
+        continue-on-error: true
+        run: |
+          xcrun simctl launch "$STUDIO_SIMULATOR" com.threads.studio.local
+          sleep 3
+          xcrun simctl io "$STUDIO_SIMULATOR" screenshot dist/iPhone-preview.png
       - name: Download IPA here
         uses: actions/upload-artifact@v4
         with:
@@ -58,6 +69,7 @@ jobs:
           path: |
             dist/ThreadsStudio.ipa
             dist/ThreadsStudio.ipa.sha256
+            dist/iPhone-preview.png
           if-no-files-found: error
           retention-days: 14
       - name: Preserve diagnostics

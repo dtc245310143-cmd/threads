@@ -49,7 +49,7 @@ import Vision
         let audio = try await asset.loadTracks(withMediaType: .audio);XCTAssertFalse(audio.isEmpty)
         let generator = AVAssetImageGenerator(asset: asset);generator.appliesPreferredTrackTransform = true
         for (seconds,expected) in [(0.4,"first"),(2.35,"second"),(3.3,"follow")] {
-            let image = try generator.copyCGImage(at: CMTime(seconds: seconds,preferredTimescale: 600),actualTime: nil)
+            let image = try await generator.image(at: CMTime(seconds: seconds,preferredTimescale: 600)).image
             let request = VNRecognizeTextRequest();request.recognitionLanguages = ["en-US"]
             try VNImageRequestHandler(cgImage: image).perform([request])
             let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased()

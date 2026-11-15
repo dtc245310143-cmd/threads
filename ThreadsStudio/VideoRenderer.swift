@@ -154,42 +154,34 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
         if let backgroundChoice { base = try ProjectStore.url(backgroundChoice) }
         else { base = try await makeCanvas(in: temp) }
         let baseTrack = try await loop(base,into: background,duration: cursor,type: .video)
-        let bgLayer = AVMutableVideoCompositionLayerInstruction(assetTrack: background)
-        bgLayer.setTransform(try await transform(baseTrack,rect: CGRect(origin: .zero,size: CardDrawing.canvas),fill: true),at: .zero)
-        var layers: [AVMutableVideoCompositionLayerInstruction] = []
+        let backgroundTransform = try await transform(baseTrack,rect: CGRect(origin: .zero,size: CardDrawing.canvas),fill: true)
         let auxChoice = p.auxiliaryEnabled ? (p.auxiliaryVideos.isEmpty ? videos : p.auxiliaryVideos).randomElement() : nil
-        var aux: AVMutableVideoCompositionLayerInstruction?,auxSource: AVAssetTrack?
+        var auxID: CMPersistentTrackID?,auxSource: AVAssetTrack?
         if let choice = auxChoice,let track = composition.addMutableTrack(withMediaType: .video,preferredTrackID: kCMPersistentTrackID_Invalid) {
             auxSource = try await loop(ProjectStore.url(choice),into: track,duration: cursor,type: .video)
-            aux = AVMutableVideoCompositionLayerInstruction(assetTrack: track);layers.append(aux!)
+            auxID = track.trackID
         }
-        layers.append(bgLayer)
-        let parent = CALayer();parent.frame = CGRect(origin: .zero,size: CardDrawing.canvas);parent.isGeometryFlipped = true
-        let video = CALayer();video.frame = parent.bounds;parent.addSublayer(video)
+        var frames: [VisualFrame] = []
         for item in items {
             try Task.checkCancellation()
             let image = try CardDrawing.image(item,project: p),rect = CardDrawing.rect(image,scene: item,project: p)
-            let layer = CALayer();layer.contents = image.cgImage;layer.frame = rect;layer.opacity = 0;layer.contentsGravity = .resizeAspect
-            let animation = CABasicAnimation(keyPath: "opacity");animation.fromValue = 1;animation.toValue = 1
-            animation.beginTime = AVCoreAnimationBeginTimeAtZero+item.start;animation.duration = item.duration
-            animation.isRemovedOnCompletion = false;animation.fillMode = .removed;layer.add(animation,forKey: "show")
-            parent.addSublayer(layer)
-            if let aux,let auxSource {
+            guard let cgImage = image.cgImage else { throw StudioError.message("Không vẽ được thẻ video.") }
+            var auxTransform: CGAffineTransform?
+            if auxID != nil,let auxSource {
                 let hidden = item.photo || item.outro
-                aux.setOpacity(hidden ? 0 : 1,at: ct(item.start))
                 let natural = try await auxSource.load(.naturalSize),preferred = try await auxSource.load(.preferredTransform)
                 let bounds = CGRect(origin: .zero,size: natural).applying(preferred)
                 var width = 1080*p.auxiliaryScale,height = min(1800,width*bounds.height/max(1,bounds.width))
                 if p.auxiliaryBelowCard {
                     let available = max(0,1920-rect.maxY-56)
                     let factor = min(1,available/max(1,height));width *= factor;height *= factor
-                    if available < 80 { aux.setOpacity(0,at: ct(item.start)) }
                 }
                 let x = min(1080-width,max(0,1080*p.auxiliaryX-width/2))
                 let desired = p.auxiliaryBelowCard ? max(rect.maxY+32,1920*p.auxiliaryY-height/2) : 1920*p.auxiliaryY-height/2
                 let y = min(1920-height-24,max(0,desired))
-                aux.setTransform(try await transform(auxSource,rect: CGRect(x: x,y: y,width: width,height: height),fill: false),at: ct(item.start))
+                if !hidden && height >= 80 { auxTransform = try await transform(auxSource,rect: CGRect(x: x,y: y,width: width,height: height),fill: false) }
             }
+            frames.append(VisualFrame(start: item.start,end: item.start+item.duration,image: cgImage,rect: rect,auxiliaryTransform: auxTransform))
         }
         var mixInputs: [AVMutableAudioMixInputParameters] = []
         for effect in [false,true] {
@@ -210,9 +202,9 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
             mixInputs.append(input)
         }
         let mix = AVMutableAudioMix();mix.inputParameters = mixInputs
-        let instruction = AVMutableVideoCompositionInstruction();instruction.timeRange = CMTimeRange(start: .zero,duration: ct(cursor));instruction.layerInstructions = layers
+        let instruction = FrameInstruction(duration: ct(cursor),background: background.trackID,auxiliary: auxID,backgroundTransform: backgroundTransform,frames: frames)
         let videoComposition = AVMutableVideoComposition();videoComposition.renderSize = CardDrawing.canvas;videoComposition.frameDuration = CMTime(value: 1,timescale: 24)
-        videoComposition.instructions = [instruction];videoComposition.animationTool = AVVideoCompositionCoreAnimationTool(postProcessingAsVideoLayer: video,in: parent)
+        videoComposition.instructions = [instruction];videoComposition.customVideoCompositorClass = FrameCompositor.self
         guard let exporter = AVAssetExportSession(asset: composition,presetName: AVAssetExportPreset1920x1080) else { throw StudioError.message("iPhone không hỗ trợ xuất video này.") }
         let output = temp.appendingPathComponent("video.mp4");exporter.outputURL = output;exporter.outputFileType = .mp4
         exporter.videoComposition = videoComposition;exporter.audioMix = mix;exporter.shouldOptimizeForNetworkUse = true
