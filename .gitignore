@@ -1,0 +1,8 @@
+build-device/
+build-simulator/
+dist/
+*.xcresult/
+*.log
+**/xcuserdata/
+**/__pycache__/
+.DS_Store

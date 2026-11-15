@@ -1,0 +1,64 @@
+name: Build iPhone IPA
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['ThreadsStudio/**', 'Tests/**', 'scripts/**', '.github/workflows/ios.yml']
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select available Xcode
+        run: |
+          if [ -d /Applications/Xcode_16.4.app ]; then sudo xcode-select -s /Applications/Xcode_16.4.app; fi
+          xcodebuild -version
+      - name: Test Threads parser
+        run: node Tests/scan.test.cjs
+      - name: Generate project
+        run: python3 scripts/generate_project.py
+      - name: Pick iPhone simulator
+        run: |
+          xcrun simctl list devices available --json > /tmp/studio-devices.json
+          python3 - <<'PY'
+          import json, os
+          devices=json.load(open('/tmp/studio-devices.json'))['devices']
+          iphones=[d for runtime,group in devices.items() if '.iOS-' in runtime for d in group if d.get('isAvailable') and d['name'].startswith('iPhone')]
+          if not iphones: raise SystemExit('No iPhone simulator installed')
+          with open(os.environ['GITHUB_ENV'],'a') as f: f.write('STUDIO_SIMULATOR='+iphones[0]['udid']+'\n')
+          PY
+      - name: Native tests and actual MP4 export
+        run: |
+          set -o pipefail
+          xcodebuild test -project ThreadsStudio.xcodeproj -scheme ThreadsStudio \
+            -destination "platform=iOS Simulator,id=$STUDIO_SIMULATOR" -derivedDataPath build-simulator \
+            -parallel-testing-enabled NO -resultBundlePath test-results.xcresult \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO | tee test.log
+      - name: Build unsigned arm64 IPA
+        run: bash scripts/build_ipa.sh | tee build.log
+      - name: Download IPA here
+        uses: actions/upload-artifact@v4
+        with:
+          name: ThreadsStudio-iPhone-unsigned
+          path: |
+            dist/ThreadsStudio.ipa
+            dist/ThreadsStudio.ipa.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOS-diagnostics
+          path: |
+            test.log
+            build.log
+            test-results.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
