@@ -119,4 +119,39 @@ import Darwin
         XCTAssertTrue(text.contains("webview"),"Covered WebView produced a blank snapshot: \(text)")
         XCTAssertTrue(cover.superview === controller.view)
     }
+
+    func testFullDesktopVoiceVideoIncludesSpeechAndRealSentencePause() async throws {
+        var project = Project();project.text = "Xin chào các bạn. Đây là một câu khác."
+        project.comments = [];project.backgroundEnabled = false;project.auxiliaryEnabled = false;project.musicEnabled = false
+        project.voiceEngine = "desktop";project.speed = 0.8;project.sentencePause = 1.1
+        let output = try await VideoRenderer().render(project: project) { _,_ in }
+        defer { try? FileManager.default.removeItem(at: output) }
+        let asset = AVURLAsset(url: output),tracks = try await asset.loadTracks(withMediaType: .audio)
+        let track = try XCTUnwrap(tracks.first),reader = try AVAssetReader(asset: asset)
+        let decoded = AVAssetReaderTrackOutput(track: track,outputSettings: [AVFormatIDKey:kAudioFormatLinearPCM,AVLinearPCMBitDepthKey:32,AVLinearPCMIsFloatKey:true,AVLinearPCMIsNonInterleaved:false])
+        reader.add(decoded);XCTAssertTrue(reader.startReading())
+        var all: [Float] = [],channels = 0,rate = 0.0
+        while let sample = decoded.copyNextSampleBuffer() {
+            if let format = CMSampleBufferGetFormatDescription(sample),let description = CMAudioFormatDescriptionGetStreamBasicDescription(format) {
+                channels = Int(description.pointee.mChannelsPerFrame);rate = description.pointee.mSampleRate
+            }
+            guard let block = CMSampleBufferGetDataBuffer(sample) else { continue }
+            let size = CMBlockBufferGetDataLength(block)
+            var samples = [Float](repeating: 0,count: size/4)
+            let status = samples.withUnsafeMutableBytes { CMBlockBufferCopyDataBytes(block,atOffset: 0,dataLength: size,destination: $0.baseAddress!) }
+            XCTAssertEqual(status,kCMBlockBufferNoErr);all += samples
+        }
+        XCTAssertEqual(reader.status,.completed);XCTAssertGreaterThan(all.map { abs($0) }.max() ?? 0,0.01)
+        XCTAssertGreaterThan(channels,0);XCTAssertGreaterThan(rate,0)
+        let window = max(1,Int(rate*Double(channels)*0.05))
+        var quiet = 0,longest = 0
+        for start in stride(from: 0,to: all.count,by: window) {
+            let values = all[start..<min(start+window,all.count)]
+            let energy = values.reduce(0.0) { $0+Double($1*$1) }/Double(values.count)
+            if energy < 0.000001 { quiet += 1;longest = max(longest,quiet) } else { quiet = 0 }
+        }
+        XCTAssertGreaterThanOrEqual(Double(longest)*0.05,0.8,"Configured sentence silence was lost during pitch-preserving speed change/export")
+        let length = try await mediaDuration(output)
+        XCTAssertGreaterThan(length,3)
+    }
 }
