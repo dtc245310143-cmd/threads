@@ -81,6 +81,7 @@ struct Project: Codable {
 
     func selectedComments() -> [ThreadComment] {
         Array(comments.filter {
+            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             (includeAuthor || $0.author.lowercased() != author.lowercased()) &&
             (!onlyAuthorInteraction || $0.authorLiked || $0.authorReplied)
         }.sorted { a,b in
@@ -174,5 +175,13 @@ func mediaDuration(_ url: URL) async throws -> Double {
     guard duration.isFinite && duration > 0 && duration <= 1800 else {
         throw StudioError.message("Media rỗng hoặc dài quá 30 phút: \(url.lastPathComponent)")
     }
+    return duration
+}
+
+func audioDuration(_ url: URL) async throws -> Double {
+    let asset = AVURLAsset(url: url)
+    guard let track = try await asset.loadTracks(withMediaType: .audio).first else { throw StudioError.message("Tệp không có tiếng: \(url.lastPathComponent)") }
+    let duration = try await track.load(.timeRange).duration.seconds
+    guard duration.isFinite && duration > 0 && duration <= 1800 else { throw StudioError.message("Đoạn âm thanh rỗng hoặc dài quá 30 phút.") }
     return duration
 }

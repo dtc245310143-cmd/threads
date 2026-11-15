@@ -33,12 +33,21 @@ jobs:
           if not iphones: raise SystemExit('No iPhone simulator installed')
           with open(os.environ['GITHUB_ENV'],'a') as f: f.write('STUDIO_SIMULATOR='+iphones[0]['udid']+'\n')
           PY
-      - name: Native tests and actual MP4 export
+      - name: Compile native app and tests
+        timeout-minutes: 8
         run: |
           set -o pipefail
-          xcodebuild test -project ThreadsStudio.xcodeproj -scheme ThreadsStudio \
+          xcodebuild build-for-testing -project ThreadsStudio.xcodeproj -scheme ThreadsStudio \
+            -destination "platform=iOS Simulator,id=$STUDIO_SIMULATOR" -derivedDataPath build-simulator \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO | tee compile.log
+      - name: Native tests and actual MP4 export
+        timeout-minutes: 6
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building -project ThreadsStudio.xcodeproj -scheme ThreadsStudio \
             -destination "platform=iOS Simulator,id=$STUDIO_SIMULATOR" -derivedDataPath build-simulator \
             -parallel-testing-enabled NO -resultBundlePath test-results.xcresult \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 90 -maximum-test-execution-time-allowance 120 \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO | tee test.log
       - name: Build unsigned arm64 IPA
         run: bash scripts/build_ipa.sh | tee build.log
@@ -58,6 +67,7 @@ jobs:
           name: iOS-diagnostics
           path: |
             test.log
+            compile.log
             build.log
             test-results.xcresult
           if-no-files-found: ignore

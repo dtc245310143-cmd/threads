@@ -139,7 +139,7 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
             }
             cursor = max(cursor+0.25,start+items[index].minimum)
             for hook in items[index].hooks {
-                try Task.checkCancellation();let file = try ProjectStore.url(hook),length = try await mediaDuration(file)
+                try Task.checkCancellation();let file = try ProjectStore.url(hook),length = try await audioDuration(file)
                 clips.append(AudioClip(url: file,start: cursor,duration: length,effect: true));cursor += length
             }
             items[index].duration = cursor-start
@@ -198,7 +198,8 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
             for clip in selected {
                 let asset = AVURLAsset(url: clip.url)
                 guard let source = try await asset.loadTracks(withMediaType: .audio).first else { throw StudioError.message("Tệp không có tiếng: \(clip.url.lastPathComponent)") }
-                try track.insertTimeRange(CMTimeRange(start: .zero,duration: ct(clip.duration)),of: source,at: ct(clip.start))
+                let sourceRange = try await source.load(.timeRange)
+                try track.insertTimeRange(CMTimeRange(start: sourceRange.start,duration: ct(clip.duration)),of: source,at: ct(clip.start))
             }
             let input = AVMutableAudioMixInputParameters(track: track);input.setVolume(Float(effect ? p.soundVolume : 1),at: .zero);mixInputs.append(input)
         }
@@ -215,6 +216,9 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
         guard let exporter = AVAssetExportSession(asset: composition,presetName: AVAssetExportPreset1920x1080) else { throw StudioError.message("iPhone không hỗ trợ xuất video này.") }
         let output = temp.appendingPathComponent("video.mp4");exporter.outputURL = output;exporter.outputFileType = .mp4
         exporter.videoComposition = videoComposition;exporter.audioMix = mix;exporter.shouldOptimizeForNetworkUse = true
+        if let creditsURL = Bundle.main.url(forResource: "SOURCES",withExtension: "txt",subdirectory: "Library"),let credits = try? String(contentsOf: creditsURL,encoding: .utf8) {
+            let metadata = AVMutableMetadataItem();metadata.identifier = .commonIdentifierDescription;metadata.value = (credits+"\nThreads source: "+p.sourceURL) as NSString;exporter.metadata = [metadata]
+        }
         let monitoring = Task {
             while !Task.isCancelled { progress(0.65+Double(exporter.progress)*0.34,"Đang xuất MP4 trên iPhone…");try? await Task.sleep(for: .milliseconds(500)) }
         }
@@ -239,12 +243,14 @@ private struct AudioClip { var url: URL;var start: Double;var duration: Double;v
     }
 
     private func loop(_ url: URL,into track: AVMutableCompositionTrack,duration: Double,type: AVMediaType) async throws -> AVAssetTrack {
-        let asset = AVURLAsset(url: url),length = try await mediaDuration(url)
+        let asset = AVURLAsset(url: url),assetLength = try await mediaDuration(url)
         guard let source = try await asset.loadTracks(withMediaType: type).first else { throw StudioError.message("Media thiếu \(type.rawValue): \(url.lastPathComponent)") }
+        let sourceRange = try await source.load(.timeRange),length = min(assetLength,sourceRange.duration.seconds)
+        guard length.isFinite && length > 0 else { throw StudioError.message("Media không có khung hình/tiếng hợp lệ.") }
         var cursor = 0.0
         while cursor < duration-0.00001 {
             try Task.checkCancellation();let amount = min(length,duration-cursor)
-            try track.insertTimeRange(CMTimeRange(start: .zero,duration: ct(amount)),of: source,at: ct(cursor));cursor += amount
+            try track.insertTimeRange(CMTimeRange(start: sourceRange.start,duration: ct(amount)),of: source,at: ct(cursor));cursor += amount
         }
         return source
     }

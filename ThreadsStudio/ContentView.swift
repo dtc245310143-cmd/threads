@@ -40,7 +40,7 @@ enum ImportRole: String,Identifiable {
     case photos,logo,sounds,backgrounds,auxiliaryVideos,music
     var id: String { rawValue }
     var types: [UTType] {
-        switch self { case .photos,.logo:return [.image];case .backgrounds,.auxiliaryVideos:return [.movie];case .sounds,.music:return [.audio] }
+        switch self { case .photos,.logo:return [.image];case .backgrounds,.auxiliaryVideos:return [.movie];case .sounds:return [.audio,.movie];case .music:return [.audio] }
     }
 }
 
@@ -70,22 +70,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $browser,onDismiss: { scanner.stop() }) { browserSheet }
         .fileImporter(isPresented: $importing,allowedContentTypes: importRole.types,allowsMultipleSelection: importRole != .logo) { result in
-            do {
-                for url in try result.get() {
-                    let asset = try ProjectStore.importFile(url,image: importRole == .photos || importRole == .logo)
-                    store.project.assetNames[asset] = url.lastPathComponent
-                    switch importRole {
-                    case .photos:guard store.project.photos.count < 20 else { throw StudioError.message("Tối đa 20 ảnh bài viết.") };store.project.photos.append(PostPhoto(asset: asset))
-                    case .logo:store.project.channelLogo = asset
-                    case .sounds:
-                        if let id = commentSoundTarget,let index = store.project.comments.firstIndex(where: { $0.id == id }) { store.project.comments[index].sounds.append(asset) }
-                        else { store.project.sounds.append(asset) }
-                    case .backgrounds:store.project.backgrounds.append(asset)
-                    case .auxiliaryVideos:store.project.auxiliaryVideos.append(asset)
-                    case .music:store.project.music.append(asset)
-                    }
-                }
-            } catch { store.message = error.localizedDescription }
+            handleImport(result)
         }
         .alert("Threads Studio",isPresented: Binding(get: { store.message != nil },set: { if !$0 { store.message = nil } })) { Button("Đóng",role: .cancel) { store.message = nil } } message: { Text(store.message ?? "") }
         .onChange(of: scenePhase) { _,phase in if phase != .active { store.save() } }
@@ -183,7 +168,7 @@ struct ContentView: View {
                 Toggle("Sound effect sau bình luận",isOn: $store.project.soundsEnabled)
                 Stepper("\(store.project.soundCount) sound effect / bình luận",value: $store.project.soundCount,in: 0...5)
                 valueSlider("Âm lượng hiệu ứng",value: $store.project.soundVolume,range: 0...1,step: 0.05,suffix: "")
-                Button("Thêm nhiều MP3 / âm thanh") { pick(.sounds) }
+                Button("Thêm MP3 hoặc video để lấy tiếng") { pick(.sounds) }
                 mediaList($store.project.sounds)
                 Text("Thẻ bình luận giữ nguyên đến hết toàn bộ tiếng hiệu ứng. Để trống danh sách để dùng kho tích hợp, chọn ngẫu nhiên theo nhóm từ khóa. Kho tích hợp là bản chụp đã chọn, không tự cập nhật bảng hot.").font(.caption).foregroundStyle(.secondary)
             } header: { Text("03 · Hiệu ứng") }
@@ -252,6 +237,25 @@ struct ContentView: View {
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Đóng") { scanner.stop();browser = false } } }
                 .task { if autoScan { autoScan = false;scanner.start(store: store) { browser = false } } }
         }
+    }
+
+    private func handleImport(_ result: Result<[URL],Error>) {
+            do {
+                for url in try result.get() {
+                    let asset = try ProjectStore.importFile(url,image: importRole == .photos || importRole == .logo)
+                    store.project.assetNames[asset] = url.lastPathComponent
+                    switch importRole {
+                    case .photos:guard store.project.photos.count < 20 else { throw StudioError.message("Tối đa 20 ảnh bài viết.") };store.project.photos.append(PostPhoto(asset: asset))
+                    case .logo:store.project.channelLogo = asset
+                    case .sounds:
+                        if let id = commentSoundTarget,let index = store.project.comments.firstIndex(where: { $0.id == id }) { store.project.comments[index].sounds.append(asset) }
+                        else { store.project.sounds.append(asset) }
+                    case .backgrounds:store.project.backgrounds.append(asset)
+                    case .auxiliaryVideos:store.project.auxiliaryVideos.append(asset)
+                    case .music:store.project.music.append(asset)
+                    }
+                }
+            } catch { store.message = error.localizedDescription }
     }
 
     private func pick(_ role: ImportRole) { commentSoundTarget = nil;importRole = role;importing = true }
