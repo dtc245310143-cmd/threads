@@ -1,6 +1,9 @@
 import XCTest
 import AVFoundation
 import Vision
+import WebKit
+import UIKit
+import Darwin
 @testable import ThreadsStudio
 
 @MainActor final class StudioTests: XCTestCase {
@@ -73,13 +76,15 @@ import Vision
     func testOldDraftKeepsValuesAndGetsNewVoiceAndEffectDefaults() throws {
         var project = Project();project.channelName = "My old channel";project.speed = 0.8
         var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(project)) as! [String:Any]
-        for key in ["voiceEngine","effectMode","effectProbability","effectEvery","blurBackground"] { json.removeValue(forKey: key) }
+        for key in ["voiceEngine","effectMode","effectProbability","effectEvery","blurBackground","quietScan"] { json.removeValue(forKey: key) }
         let restored = try Project.decodeSaved(JSONSerialization.data(withJSONObject: json))
         XCTAssertEqual(restored.channelName,"My old channel");XCTAssertEqual(restored.speed,0.8)
         XCTAssertEqual(restored.voiceEngine,"desktop");XCTAssertEqual(restored.effectMode,"random")
+        XCTAssertTrue(restored.quietScan)
     }
 
     func testDesktopVoiceActuallyGeneratesSpeech() async throws {
+        let began = Date()
         let destination = FileManager.default.urls(for: .documentDirectory,in: .userDomainMask)[0].appendingPathComponent("native-voice-test.wav")
         try await DesktopVoice().write("Xin chào các bạn. Đây là giọng mẫu trên máy tính.",destination: destination)
         let length = try await audioDuration(destination)
@@ -89,5 +94,29 @@ import Vision
         try file.read(into: buffer)
         let samples = UnsafeBufferPointer(start: buffer.floatChannelData![0],count: Int(buffer.frameLength))
         XCTAssertGreaterThan(samples.map { abs($0) }.max() ?? 0,0.01)
+        var usage = rusage();getrusage(RUSAGE_SELF,&usage)
+        print("Desktop voice: audio \(length) s, wall \(Date().timeIntervalSince(began)) s, peak RSS \(Double(usage.ru_maxrss)/1048576) MiB (Simulator)")
+    }
+
+    func testOwnWebViewCanSnapshotWhileCoveredByNativeUI() async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let previous = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene),controller = UIViewController()
+        window.rootViewController = controller;window.makeKeyAndVisible()
+        defer { window.isHidden = true;previous?.makeKeyAndVisible() }
+        let scanner = ThreadScanner(),web = scanner.webView
+        web.frame = CGRect(x: 0,y: 80,width: 320,height: 240);controller.view.addSubview(web)
+        let cover = UIView(frame: web.frame);cover.backgroundColor = .black;controller.view.addSubview(cover)
+        web.loadHTMLString("<html><meta name='viewport' content='width=device-width'><body style='margin:0;background:rgb(230,20,30);color:white;font:24px sans-serif'>Own WebView snapshot</body></html>",baseURL: nil)
+        for _ in 0..<100 { if scanner.loaded { break };try await Task.sleep(for: .milliseconds(100)) }
+        XCTAssertTrue(scanner.loaded)
+        try await Task.sleep(for: .milliseconds(300))
+        let config = WKSnapshotConfiguration();config.rect = CGRect(x: 0,y: 0,width: 300,height: 180)
+        let snapshot = try await web.takeSnapshot(configuration: config)
+        let image = try XCTUnwrap(snapshot.cgImage),request = VNRecognizeTextRequest();request.recognitionLanguages = ["en-US"]
+        try VNImageRequestHandler(cgImage: image).perform([request])
+        let text = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: " ").lowercased()
+        XCTAssertTrue(text.contains("webview"),"Covered WebView produced a blank snapshot: \(text)")
+        XCTAssertTrue(cover.superview === controller.view)
     }
 }

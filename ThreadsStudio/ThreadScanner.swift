@@ -49,17 +49,17 @@ struct ScanResult: Codable { var root: ScanRecord;var comments: [ScanRecord] }
         if webView.url != url { loaded = false;webView.load(URLRequest(url: url)) }
     }
     func login() { loaded = false;webView.load(URLRequest(url: URL(string: "https://www.threads.com/login")!)) }
-    func stop() { task?.cancel();webView.stopLoading();busy = false;status = "Đã dừng quét." }
+    func stop() { if busy { task?.cancel();status = "Đã dừng quét." };webView.stopLoading() }
     func webView(_ webView: WKWebView,didFinish navigation: WKNavigation!) { loaded = true }
     func webView(_ webView: WKWebView,didFailProvisionalNavigation navigation: WKNavigation!,withError error: Error) { status = error.localizedDescription }
 
-    func start(store: ProjectStore, finished: @escaping () -> Void) {
-        guard !busy else { return };busy = true
+    func start(store: ProjectStore, failed: (() -> Void)? = nil, finished: @escaping () -> Void) {
+        guard !busy else { return };busy = true;status = "Đang tải bài viết…";storeWarning = ""
         task = Task {
             defer { busy = false }
-            do { let result = try await scan(project: store.project);store.project = result;store.save();finished() }
+            do { let result = try await scan(project: store.project);try Task.checkCancellation();store.project = result;store.save();finished() }
             catch is CancellationError { status = "Đã dừng quét." }
-            catch { status = error.localizedDescription }
+            catch { status = error.localizedDescription;failed?() }
         }
     }
 
@@ -90,10 +90,10 @@ struct ScanResult: Codable { var root: ScanRecord;var comments: [ScanRecord] }
         guard result.root.text.count <= 16000 else { throw StudioError.message("Bài viết quá 16.000 ký tự.") }
         var updated = project
         updated.author = result.root.author;updated.text = result.root.text;updated.capturedText = result.root.text
-        let previous = project.comments.reduce(into: [String:ThreadComment]()) { $0[$1.id] = $1 }
+        let previousComments = project.comments.reduce(into: [String:ThreadComment]()) { $0[$1.id] = $1 }
         updated.comments = result.comments.map { record in
             var comment = record.comment
-            if let old = previous[comment.id] { comment.sounds = old.sounds;comment.effectOverride = old.effectOverride }
+            if let old = previousComments[comment.id] { comment.sounds = old.sounds;comment.effectOverride = old.effectOverride }
             return comment
         }
         updated.photos = [];updated.captures = []
@@ -166,6 +166,13 @@ private final class NoRedirects: NSObject,URLSessionTaskDelegate {
 
 struct ThreadsBrowserView: UIViewRepresentable {
     let scanner: ThreadScanner
-    func makeUIView(context: Context) -> WKWebView { scanner.webView }
-    func updateUIView(_ view: WKWebView,context: Context) {}
+    var interactive = true
+    func makeUIView(context: Context) -> UIView { let host = UIView();mount(in: host);return host }
+    func updateUIView(_ view: UIView,context: Context) { mount(in: view) }
+    private func mount(in host: UIView) {
+        let web = scanner.webView
+        if web.superview !== host { web.removeFromSuperview();host.addSubview(web) }
+        web.frame = host.bounds;web.autoresizingMask = [.flexibleWidth,.flexibleHeight]
+        web.isUserInteractionEnabled = interactive
+    }
 }

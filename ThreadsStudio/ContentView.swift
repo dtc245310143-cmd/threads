@@ -70,21 +70,32 @@ struct ContentView: View {
         .safeAreaInset(edge: .top,spacing: 0) {
             HStack { Image(systemName: "circle.dotted.circle.fill");Text("THREADS STUDIO").font(.caption.bold());Spacer();Text(store.saveStatus).font(.caption2).foregroundStyle(store.saveStatus == "Lưu thất bại" ? Color.red : Color.secondary) }.padding(.horizontal,20).padding(.vertical,8).background(.ultraThinMaterial)
         }
+        .background(Color.black.ignoresSafeArea())
+        .background {
+            if !browser { ThreadsBrowserView(scanner: scanner,interactive: false).allowsHitTesting(false).accessibilityHidden(true) }
+        }
         .sheet(isPresented: $browser,onDismiss: { scanner.stop() }) { browserSheet }
         .fileImporter(isPresented: $importing,allowedContentTypes: importRole.types,allowsMultipleSelection: importRole != .logo) { result in
             handleImport(result)
         }
         .alert("Threads Studio",isPresented: Binding(get: { store.message != nil },set: { if !$0 { store.message = nil } })) { Button("Đóng",role: .cancel) { store.message = nil } } message: { Text(store.message ?? "") }
-        .onChange(of: scenePhase) { _,phase in if phase != .active { store.save() } }
+        .onChange(of: scenePhase) { _,phase in
+            if phase != .active { store.save();if scanner.busy { scanner.stop();scanner.status = "Đã dừng vì app ra nền. Giữ Threads Studio mở rồi bấm Quét lại." } }
+        }
+        .onChange(of: scanner.busy) { _,busy in UIApplication.shared.isIdleTimerDisabled = busy || export.busy }
     }
 
     private var draft: some View {
         Form {
             Section {
                 TextField("Dán link bài viết Threads",text: $store.project.sourceURL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                Button { do { try scanner.open(store.project.sourceURL);autoScan = true;browser = true } catch { store.message = error.localizedDescription } } label: { Label("Quét bài viết tự động",systemImage: "sparkle.magnifyingglass") }.disabled(export.busy)
-                Button("Đăng nhập Threads") { autoScan = false;scanner.login();browser = true }
+                Toggle("Quét kín · giữ màn hình điều khiển",isOn: $store.project.quietScan).disabled(scanner.busy)
+                Button { beginScan() } label: { Label("Quét bài viết tự động",systemImage: "sparkle.magnifyingglass") }.disabled(export.busy || scanner.busy)
+                Button("Đăng nhập Threads") { autoScan = false;scanner.login();browser = true }.disabled(scanner.busy || export.busy)
+                if scanner.busy { HStack { ProgressView();Text(scanner.status).font(.caption);Spacer();Button("Dừng",role: .destructive) { scanner.stop() } } }
+                else { Text(scanner.status).font(.caption).foregroundStyle(.secondary) }
                 Text("Bạn tự đăng nhập trong trình duyệt của app. Phiên được giữ trên iPhone; không nhập mật khẩu vào ô cấu hình.").font(.caption).foregroundStyle(.secondary)
+                Text("Quét kín dùng trình duyệt của Threads Studio, vẫn cần giữ app mở. Không đọc/chụp giao diện app Threads khác.").font(.caption).foregroundStyle(.secondary)
                 if !scanner.storeWarning.isEmpty { Text(scanner.storeWarning).font(.caption).foregroundStyle(.orange) }
             } header: { Text("01 · Nguồn bài viết") }
             Section("Nội dung") {
@@ -299,6 +310,14 @@ struct ContentView: View {
                 desktopPreviewPlayer = player;player.play()
             } catch { store.message = error.localizedDescription }
         }
+    }
+
+    private func beginScan() {
+        do {
+            try scanner.open(store.project.sourceURL)
+            if store.project.quietScan { scanner.start(store: store,failed: { autoScan = false;browser = true }) {} }
+            else { autoScan = true;browser = true }
+        } catch { store.message = error.localizedDescription }
     }
 
     private func pick(_ role: ImportRole) { commentSoundTarget = nil;importRole = role;importing = true }

@@ -23,6 +23,17 @@ jobs:
         run: node Tests/scan.test.cjs
       - name: Fetch verified voice model and reference
         run: python3 scripts/prepare_voice_assets.py
+      - name: Restore native voice library cache
+        id: voice-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            Native/build/iphonesimulator/libStudioVoice.a
+            Native/build/iphoneos/libStudioVoice.a
+            Native/build/iphonesimulator/source.sha256
+            Native/build/iphoneos/source.sha256
+            ThreadsStudio/Library/voice/licenses
+          key: studio-vieneu-xcode16-4-${{ runner.arch }}-${{ hashFiles('Native/CMakeLists.txt', 'Native/VoiceBridge.cpp', 'Native/VoiceBridge.h', 'scripts/build_voice.sh') }}
       - name: Build native VieNeu for Simulator
         timeout-minutes: 20
         run: |
@@ -35,6 +46,17 @@ jobs:
           bash scripts/build_voice.sh iphoneos 2>&1 | tee native-device.log
       - name: Generate project
         run: python3 scripts/generate_project.py
+      - name: Save compiled voice libraries
+        if: steps.voice-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            Native/build/iphonesimulator/libStudioVoice.a
+            Native/build/iphoneos/libStudioVoice.a
+            Native/build/iphonesimulator/source.sha256
+            Native/build/iphoneos/source.sha256
+            ThreadsStudio/Library/voice/licenses
+          key: ${{ steps.voice-cache.outputs.cache-primary-key }}
       - name: Pick iPhone simulator
         run: |
           xcrun simctl list devices available --json > /tmp/studio-devices.json

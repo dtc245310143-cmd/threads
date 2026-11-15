@@ -2,6 +2,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 sdk="${1:-iphoneos}"
+fingerprint=$(shasum -a 256 Native/CMakeLists.txt Native/VoiceBridge.cpp Native/VoiceBridge.h scripts/build_voice.sh | shasum -a 256 | cut -d ' ' -f 1)
+if [ -s "Native/build/$sdk/libStudioVoice.a" ] && [ "$(cat "Native/build/$sdk/source.sha256" 2>/dev/null || true)" = "$fingerprint" ]; then echo "Using verified build cache: $sdk";exit 0;fi
 case "$sdk" in
   iphoneos) rust_target=aarch64-apple-ios ;;
   iphonesimulator) rust_target=aarch64-apple-ios-sim ;;
@@ -35,4 +37,20 @@ mkdir -p ThreadsStudio/Library/voice/licenses
 cp Native/deps/audio/LICENSE ThreadsStudio/Library/voice/licenses/audio-cpp.txt
 cp Native/deps/sea/LICENSE ThreadsStudio/Library/voice/licenses/sea-g2p.txt
 cp Native/deps/audio/external/ggml/LICENSE ThreadsStudio/Library/voice/licenses/ggml.txt
+python3 - <<'PY'
+from pathlib import Path
+import json,shutil,subprocess
+folder=Path('ThreadsStudio/Library/voice/licenses')
+for component in ['sentencepiece','cJSON','libyaml']:
+ for p in (Path('Native/deps/audio/external')/component).iterdir():
+  if p.is_file() and p.name.lower() in ['license','license.txt','copying','notice']:
+   shutil.copyfile(p,folder/(component+'-'+p.name+'.txt'))
+metadata=json.loads(subprocess.check_output(['cargo','metadata','--manifest-path','Native/deps/sea/Cargo.toml','--format-version','1','--locked','--no-default-features','--features','capi']))
+for package in metadata['packages']:
+ root=Path(package['manifest_path']).parent
+ for p in root.iterdir():
+  if p.is_file() and (p.name.upper().startswith(('LICENSE','COPYING','NOTICE'))):
+   shutil.copyfile(p,folder/('rust-'+package['name']+'-'+p.name+'.txt'))
+PY
+echo "$fingerprint" > "Native/build/$sdk/source.sha256"
 echo "Native VieNeu ready: $sdk"

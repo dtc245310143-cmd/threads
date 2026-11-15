@@ -36,7 +36,11 @@ void *studio_voice_open(const char *directory,char *error,size_t capacity) {
         audiocpp_model_config config{};config.family_hint="vieneu_v3_turbo";
         check(audiocpp_model_load(voice->registry,(voice->directory+"/vieneu.gguf").c_str(),&config,nullptr,&voice->model));
         audiocpp_backend_config backend{"cpu",0,4};
-        check(audiocpp_session_create(voice->model,"tts","offline",&backend,nullptr,&voice->session));
+        std::unique_ptr<audiocpp_options,decltype(&audiocpp_options_free)> options(audiocpp_options_create(),audiocpp_options_free);
+        if(!options) throw std::runtime_error("Cannot allocate voice options");
+        // These are descriptor-only arenas; upstream's 64 MiB floor avoids multi-GB mobile reservations.
+        for(const char *key:{"vieneu_v3_turbo.talker_constant_context_mb","vieneu_v3_turbo.code_predictor_constant_context_mb","vieneu_v3_turbo.speech_decoder_constant_context_mb","vieneu_v3_turbo.talker_graph_arena_mb"}) check(audiocpp_options_set(options.get(),key,"64"));
+        check(audiocpp_session_create(voice->model,"tts","offline",&backend,options.get(),&voice->session));
         return voice.release();
     } catch(const std::exception &e) { fail(error,capacity,e.what());return nullptr; }
 }
@@ -52,7 +56,7 @@ int studio_voice_write(void *handle,const char *text,const char *destination,cha
         auto option=[&](const char *key,const std::string &value){check(audiocpp_request_set_option(request.get(),key,value.c_str()));};
         option("reference_codes_file",voice->directory+"/ref_codes.txt");
         option("speaker_embedding_file",voice->directory+"/speaker.emb.txt");
-        option("max_tokens","900");option("text_chunk_size","120");
+        option("max_tokens","900");
         option("temperature","0.8");option("top_k","25");option("top_p","0.95");option("repetition_penalty","1.2");
         audiocpp_result *raw=nullptr;check(audiocpp_session_run(voice->session,request.get(),&raw));
         std::unique_ptr<audiocpp_result,decltype(&audiocpp_result_free)> result(raw,audiocpp_result_free);

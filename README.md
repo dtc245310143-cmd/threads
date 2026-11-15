@@ -15,7 +15,7 @@ Nếu có Mac/Xcode: chạy `bash scripts/build_ipa.sh`; kết quả ở `dist/T
 
 ## Chức năng trong mã iOS
 
-- Đăng nhập trong WKWebView riêng của app, dùng lại phiên trên iPhone. Quét tự động ảnh gốc theo thứ tự và dữ liệu bình luận từ trang/GraphQL mà trang Threads đã tải. Không lấy phiên Cốc Cốc từ Windows, không lưu mật khẩu vào dự án.
+- Đăng nhập trong WKWebView riêng của app, dùng lại phiên trên iPhone. Quét kín giữ trang trong cùng cửa sổ, phía sau màn hình điều khiển; chụp bằng API WebKit của chính app. Khi lỗi/cần xác minh sẽ mở trang để xử lý. Không truy cập hay chụp giao diện app Threads riêng. Quét tự động ảnh gốc theo thứ tự và dữ liệu bình luận từ trang/GraphQL mà trang Threads đã tải. Không lấy phiên Cốc Cốc từ Windows, không lưu mật khẩu vào dự án.
 - Ưu tiên bình luận có tương tác từ tác giả, tim/trả lời; chọn số lượng. Chỉ xác nhận tác giả trả lời khi chuỗi dữ liệu có bằng chứng; không suy đoán từ việc bình luận gửi đến tác giả.
 - Chụp khung Threads thật nếu tìm được DOM; bình luận dài phân trang và đọc đủ. Nếu không chụp được, dựng thẻ chữ đầy đủ và báo trong app. Sửa chữ hoặc che tên sẽ dùng thẻ dựng lại.
 - Mở ảnh lần lượt sau caption; chỉnh thời gian từng ảnh; OCR và đọc chữ khi mở ảnh; giữ ảnh đến hết lời. Có thể tự sửa chữ OCR.
@@ -42,3 +42,9 @@ Kho nhạc/video/hiệu ứng có ghi nguồn trong `ThreadsStudio/Library/SOURC
 `node Tests/scan.test.cjs` chạy trên Windows/macOS. Kiểm tra Swift và xuất MP4 thật cần Xcode/iOS Simulator; không coi kiểm tra mã tĩnh trên Windows là biên dịch iOS thành công. Workflow phải xanh và IPA phải qua `scripts/verify_ipa.py` trước khi đưa ra cài.
 
 Bản nháp 1.0 được nâng cấp bằng cách bổ sung các trường mới còn thiếu, giữ nguyên các tùy chỉnh cũ. Lựa chọn hiệu ứng riêng/tiếng riêng theo ID bình luận được giữ khi quét lại. Khi chọn giọng PC, dừng xuất có thể cần chờ hết cụm đang sinh; giọng không được gửi đi máy chủ.
+
+## Quét kín
+
+Bật **Quét kín · giữ màn hình điều khiển**, dán link rồi bấm Quét. Trang Threads được giữ trong WebView của app, gắn vào cửa sổ nhưng được màn hình điều khiển che lại; không đặt WebView ra ngoài màn hình hoặc `isHidden` để tránh ảnh trắng. Đăng nhập một lần bằng nút Đăng nhập Threads. Phiên này độc lập với phiên trong app Threads chính thức.
+
+iOS không cho ứng dụng này đọc/chụp tùy ý giao diện ứng dụng khác. Quét kín cần Threads Studio ở foreground; khi chuyển app, tác vụ quét sẽ dừng và giữ dữ liệu trước đó. Chỉ sau khi quét thành công mới thay bản nháp.

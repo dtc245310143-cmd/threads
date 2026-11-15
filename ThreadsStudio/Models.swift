@@ -35,6 +35,7 @@ struct PostPhoto: Codable, Identifiable {
 
 struct Project: Codable {
     var sourceURL = ""
+    var quietScan = true
     var author = "tacgia"
     var text = "Một câu chuyện hay bắt đầu từ những điều rất nhỏ."
     var comments: [ThreadComment] = []
