@@ -11,13 +11,13 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Select available Xcode
         run: |
-          if [ -d /Applications/Xcode_16.4.app ]; then sudo xcode-select -s /Applications/Xcode_16.4.app; fi
+          sudo xcode-select -s /Applications/Xcode_26.6.app
           xcodebuild -version
       - name: Test Threads parser
         run: node Tests/scan.test.cjs
@@ -33,7 +33,7 @@ jobs:
             Native/build/iphonesimulator/source.sha256
             Native/build/iphoneos/source.sha256
             ThreadsStudio/Library/voice/licenses
-          key: studio-vieneu-xcode16-4-${{ runner.arch }}-${{ hashFiles('Native/CMakeLists.txt', 'Native/VoiceBridge.cpp', 'Native/VoiceBridge.h', 'scripts/build_voice.sh') }}
+          key: studio-vieneu-xcode26-6-${{ runner.arch }}-${{ hashFiles('Native/CMakeLists.txt', 'Native/VoiceBridge.cpp', 'Native/VoiceBridge.h', 'scripts/build_voice.sh') }}
       - name: Build native VieNeu for Simulator
         timeout-minutes: 20
         run: |
